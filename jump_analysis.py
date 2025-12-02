@@ -21,7 +21,7 @@ def load_accelerometer_folder(folder_name: str) -> pd.DataFrame:
     """
     Reads accelerometer CSV(s) from a folder, single file, or ZIP archive.
 
-    Expected columns in Accelerometer.csv:
+    Expected columns in CSV:
         "Time (s)", "X (m/s^2)", "Y (m/s^2)", "Z (m/s^2)"
 
     Returns
@@ -39,40 +39,22 @@ def load_accelerometer_folder(folder_name: str) -> pd.DataFrame:
         if zipfile.is_zipfile(folder_name):
             with zipfile.ZipFile(folder_name) as z:
                 for member in z.namelist():
-                    # normalize name and skip directories
-                    if member.endswith("/") or not member.lower().endswith(".csv") or os.path.basename(member) == "meta":
-                        continue
-
-                    base = os.path.splitext(os.path.basename(member))[0]
-                    base_l = base.lower()
-
-                    if "raw data" not in base_l or "linear" in base_l:
-                        print(f"Skipping non-accelerometer file in zip: {member!s}")
-                        continue
-
-                    with z.open(member) as f:
-                        # wrap binary file in text wrapper for pandas
-                        raw_df = pd.read_csv(io.TextIOWrapper(f, encoding="utf-8"), dtype=str)
-                        cleaned_df = raw_df.apply(
-                            lambda col: (
-                                col.str.replace("×10^", "e", regex=False)
-                                   .pipe(pd.to_numeric, errors="coerce")
+                    # Only process CSV files named "Raw Data"
+                    if member.lower() == "raw data.csv":
+                        with z.open(member) as f:
+                            raw_df = pd.read_csv(io.TextIOWrapper(f, encoding="utf-8"), dtype=str)
+                            cleaned_df = raw_df.apply(
+                                lambda col: (
+                                    col.str.replace("×10^", "e", regex=False)
+                                       .pipe(pd.to_numeric, errors="coerce")
+                                )
+                                if col.dtype == 'object' else col
                             )
-                        )
-                        folder_dict[base] = cleaned_df
+                            folder_dict["Raw Data"] = cleaned_df
+                            break  # Stop after finding the first valid CSV
             if not folder_dict:
-                raise FileNotFoundError(f"No accelerometer CSVs found inside ZIP {folder_name!s}")
-            # choose accel key similar to folder handling below
-            accel_key = next((k for k in folder_dict if k.lower() == "accelerometer"), None)
-            if accel_key is None:
-                acc_keys = [k for k in folder_dict if "acc" in k.lower()]
-                if len(acc_keys) == 1:
-                    accel_key = acc_keys[0]
-                elif len(acc_keys) > 1:
-                    accel_key = next((k for k in acc_keys if "accelerometer" in k.lower()), acc_keys[0])
-                else:
-                    accel_key = next(iter(folder_dict.keys()))
-            accel_df = folder_dict[accel_key].copy()
+                raise FileNotFoundError(f"No valid accelerometer CSV found inside ZIP {folder_name!s}")
+            accel_df = folder_dict["Raw Data"].copy()
         else:
             # plain CSV file
             path = folder_name
@@ -82,19 +64,17 @@ def load_accelerometer_folder(folder_name: str) -> pd.DataFrame:
                     col.str.replace("×10^", "e", regex=False)
                        .pipe(pd.to_numeric, errors="coerce")
                 )
+                if col.dtype == 'object' else col
             )
+            # Check for required columns
+            required_columns = ["Time (s)", "X (m/s^2)", "Y (m/s^2)", "Z (m/s^2)"]
+            if not all(col in cleaned_df.columns for col in required_columns):
+                raise ValueError(f"CSV file must contain columns: {', '.join(required_columns)}")
             accel_df = cleaned_df.copy()
     else:
         # Handle folder on disk
         for file in os.listdir(folder_name):
-            if not file.lower().endswith(".csv") or file == "meta":
-                continue
-
-            base = os.path.splitext(file)[0]
-            base_l = base.lower()
-
-            if "raw data" not in base_l or "linear" in base_l:
-                print(f"Skipping non-accelerometer file: {file!s}")
+            if not file.lower().endswith(".csv"):
                 continue
 
             path = os.path.join(folder_name, file)
@@ -104,24 +84,18 @@ def load_accelerometer_folder(folder_name: str) -> pd.DataFrame:
                     col.str.replace("×10^", "e", regex=False)
                        .pipe(pd.to_numeric, errors="coerce")
                 )
+                if col.dtype == 'object' else col
             )
-            key = os.path.splitext(file)[0]
-            folder_dict[key] = cleaned_df
+            # Check for required columns
+            required_columns = ["Time (s)", "X (m/s^2)", "Y (m/s^2)", "Z (m/s^2)"]
+            if all(col in cleaned_df.columns for col in required_columns):
+                folder_dict[file] = cleaned_df
 
         if not folder_dict:
-            raise FileNotFoundError(f"No accelerometer CSVs found in {folder_name!s}")
+            raise FileNotFoundError(f"No valid accelerometer CSV found in {folder_name!s}")
 
-        accel_key = next((k for k in folder_dict if k.lower() == "accelerometer"), None)
-        if accel_key is None:
-            acc_keys = [k for k in folder_dict if "acc" in k.lower()]
-            if len(acc_keys) == 1:
-                accel_key = acc_keys[0]
-            elif len(acc_keys) > 1:
-                accel_key = next((k for k in acc_keys if "accelerometer" in k.lower()), acc_keys[0])
-            else:
-                accel_key = next(iter(folder_dict.keys()))
-
-        accel_df = folder_dict[accel_key].copy()
+        # Use the first valid CSV found
+        accel_df = next(iter(folder_dict.values())).copy()
 
     # add magnitude column
     accel_df["Magnitude (m/s^2)"] = np.sqrt(

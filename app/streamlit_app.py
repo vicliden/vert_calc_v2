@@ -29,7 +29,7 @@ st.set_page_config(page_title="Jump Analyzer", layout="centered")
 st.title("Jump Analyzer — phyphox CSVs")
 
 st.markdown(
-    "Upload one or more phyphox/Ead/CSV files (or a zip of them). The app will group files by folder-style uploads, call analyze_jumps_from_folder, and show per-jump plots & metrics."
+    "Upload one or more phyphox/Ead/CSV files (or a zip of them, but then data file must be called \"Raw Data\"). The app will group files by folder-style uploads, call analyze_jumps_from_folder, and show per-jump plots & metrics."
 )
 
 # Quick links to the phyphox apps for users who want to record CSVs on their phone
@@ -51,7 +51,10 @@ st.sidebar.markdown(
     "- Put the phone in your back pocket so it moves with your body.\n"
     "- Start standing still, then do a vertical jump — try to land with fairly straight legs.\n"
     "- Record a few jumps (more examples give better results), then export or upload the accelerometer CSV.\n"
+    "- Make sure to include some time before takeoff and after landing (a few seconds each) for best results.\n" \
+    "- Export the data as CSV format (phyphox has an 'Export' button after recording).\n"
     "\nIf you want, try a couple of practice jumps to get comfortable before recording the ones you want to analyze.",
+    
     unsafe_allow_html=True,
 )
 
