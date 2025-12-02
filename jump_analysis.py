@@ -42,7 +42,7 @@ def load_accelerometer_folder(folder_name: str) -> pd.DataFrame:
                     base = os.path.splitext(os.path.basename(member))[0]
                     base_l = base.lower()
 
-                    if "acc" not in base_l or "linear" in base_l:
+                    if "raw data" not in base_l or "linear" in base_l:
                         print(f"Skipping non-accelerometer file in zip: {member!s}")
                         continue
 
@@ -89,7 +89,7 @@ def load_accelerometer_folder(folder_name: str) -> pd.DataFrame:
             base = os.path.splitext(file)[0]
             base_l = base.lower()
 
-            if "acc" not in base_l or "linear" in base_l:
+            if "raw data" not in base_l or "linear" in base_l:
                 print(f"Skipping non-accelerometer file: {file!s}")
                 continue
 
