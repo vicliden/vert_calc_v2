@@ -4,7 +4,11 @@ import pandas as pd
 from scipy.signal import find_peaks
 import json
 import io
-import zipfile
+import sys
+if sys.version_info >= (3, 6):
+    import zipfile
+else:
+    import zipfile36 as zipfile
 
 GRAVITY = 9.81  # m/s^2
 

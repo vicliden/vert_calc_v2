@@ -3,4 +3,5 @@ numpy
 pandas
 scipy
 matplotlib
-zipfile
+zipfile36
+sys
