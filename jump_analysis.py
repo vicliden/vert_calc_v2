@@ -30,7 +30,18 @@ def load_accelerometer_folder(folder_name: str) -> pd.DataFrame:
     folder_dict: dict[str, pd.DataFrame] = {}
 
     for file in os.listdir(folder_name):
-        if file == "meta" or not file.endswith(".csv"):
+        # only care about CSVs
+        if not file.lower().endswith(".csv"):
+            continue
+        if file == "meta":
+            continue
+
+        base = os.path.splitext(file)[0]
+        base_l = base.lower()
+
+        # require filenames related to accelerometer (contain "acc")
+        # but exclude files that mention "linear" (e.g. "linear_acc.csv")
+        if "acc" not in base_l or "linear" in base_l:
             continue
 
         path = os.path.join(folder_name, file)
@@ -48,7 +59,21 @@ def load_accelerometer_folder(folder_name: str) -> pd.DataFrame:
         key = os.path.splitext(file)[0]
         folder_dict[key] = cleaned_df
 
-    accel_df = folder_dict["Accelerometer"].copy()
+    if not folder_dict:
+        raise FileNotFoundError(f"No accelerometer CSVs found in {folder_name!s}")
+
+    # Prefer exact "Accelerometer" key (case-insensitive), else pick a sensible fallback
+    accel_key = next((k for k in folder_dict if k.lower() == "accelerometer"), None)
+    if accel_key is None:
+        acc_keys = [k for k in folder_dict if "acc" in k.lower()]
+        if len(acc_keys) == 1:
+            accel_key = acc_keys[0]
+        elif len(acc_keys) > 1:
+            accel_key = next((k for k in acc_keys if "accelerometer" in k.lower()), acc_keys[0])
+        else:
+            accel_key = next(iter(folder_dict.keys()))
+
+    accel_df = folder_dict[accel_key].copy()
 
     # add magnitude column
     accel_df["Magnitude (m/s^2)"] = np.sqrt(
