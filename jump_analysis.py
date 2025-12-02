@@ -3,6 +3,8 @@ import numpy as np
 import pandas as pd
 from scipy.signal import find_peaks
 import json
+import io
+import zipfile
 
 GRAVITY = 9.81  # m/s^2
 
@@ -13,8 +15,8 @@ GRAVITY = 9.81  # m/s^2
 
 def load_accelerometer_folder(folder_name: str) -> pd.DataFrame:
     """
-    Reads accelerometer CSV(s) from a folder or single file.
-    
+    Reads accelerometer CSV(s) from a folder, single file, or ZIP archive.
+
     Expected columns in Accelerometer.csv:
         "Time (s)", "X (m/s^2)", "Y (m/s^2)", "Z (m/s^2)"
 
@@ -25,21 +27,61 @@ def load_accelerometer_folder(folder_name: str) -> pd.DataFrame:
         X (m/s^2), Y (m/s^2), Z (m/s^2)
         Magnitude (m/s^2)
     """
+
     folder_dict: dict[str, pd.DataFrame] = {}
 
-    # Handle single file
+    # Handle single file (CSV) or ZIP archive
     if os.path.isfile(folder_name):
-        path = folder_name
-        raw_df = pd.read_csv(path, dtype=str)
-        cleaned_df = raw_df.apply(
-            lambda col: (
-                col.str.replace("×10^", "e", regex=False)
-                   .pipe(pd.to_numeric, errors="coerce")
+        if zipfile.is_zipfile(folder_name):
+            with zipfile.ZipFile(folder_name) as z:
+                for member in z.namelist():
+                    # normalize name and skip directories
+                    if member.endswith("/") or not member.lower().endswith(".csv") or os.path.basename(member) == "meta":
+                        continue
+
+                    base = os.path.splitext(os.path.basename(member))[0]
+                    base_l = base.lower()
+
+                    if "acc" not in base_l or "linear" in base_l:
+                        print(f"Skipping non-accelerometer file in zip: {member!s}")
+                        continue
+
+                    with z.open(member) as f:
+                        # wrap binary file in text wrapper for pandas
+                        raw_df = pd.read_csv(io.TextIOWrapper(f, encoding="utf-8"), dtype=str)
+                        cleaned_df = raw_df.apply(
+                            lambda col: (
+                                col.str.replace("×10^", "e", regex=False)
+                                   .pipe(pd.to_numeric, errors="coerce")
+                            )
+                        )
+                        folder_dict[base] = cleaned_df
+            if not folder_dict:
+                raise FileNotFoundError(f"No accelerometer CSVs found inside ZIP {folder_name!s}")
+            # choose accel key similar to folder handling below
+            accel_key = next((k for k in folder_dict if k.lower() == "accelerometer"), None)
+            if accel_key is None:
+                acc_keys = [k for k in folder_dict if "acc" in k.lower()]
+                if len(acc_keys) == 1:
+                    accel_key = acc_keys[0]
+                elif len(acc_keys) > 1:
+                    accel_key = next((k for k in acc_keys if "accelerometer" in k.lower()), acc_keys[0])
+                else:
+                    accel_key = next(iter(folder_dict.keys()))
+            accel_df = folder_dict[accel_key].copy()
+        else:
+            # plain CSV file
+            path = folder_name
+            raw_df = pd.read_csv(path, dtype=str)
+            cleaned_df = raw_df.apply(
+                lambda col: (
+                    col.str.replace("×10^", "e", regex=False)
+                       .pipe(pd.to_numeric, errors="coerce")
+                )
             )
-        )
-        accel_df = cleaned_df.copy()
+            accel_df = cleaned_df.copy()
     else:
-        # Handle folder
+        # Handle folder on disk
         for file in os.listdir(folder_name):
             if not file.lower().endswith(".csv") or file == "meta":
                 continue
@@ -314,6 +356,7 @@ def make_jump_graph(df_jump: pd.DataFrame,
         bytes (bytes) containing the image data.
     """
     import io
+    import zipfile
     import matplotlib.pyplot as plt
 
     t = df_jump["Time (s)"].to_numpy()
