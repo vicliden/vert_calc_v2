@@ -5,6 +5,8 @@ from scipy.signal import find_peaks
 import json
 import io
 import sys
+import re
+
 if sys.version_info >= (3, 6):
     import zipfile
 else:
@@ -30,48 +32,120 @@ def load_accelerometer_folder(folder_name: str) -> pd.DataFrame:
         X (m/s^2), Y (m/s^2), Z (m/s^2)
         Magnitude (m/s^2)
     """
+    required_columns = ["Time (s)", "X (m/s^2)", "Y (m/s^2)", "Z (m/s^2)"]
 
-    # Initialize an empty DataFrame
+    def _clean_text(s: str) -> str:
+        # normalize unicode minus to ASCII hyphen
+        s = s.replace("\u2212", "-")
+        # convert '×10^n', '× 10^n', 'x10^n', 'x 10 n' etc -> 'eN'
+        s = re.sub(r'[×xX]\s*10\^?\s*([+\-−]?\d+)', r'e\1', s)
+        # also accept forms like '5.7×10-4' (no caret)
+        s = re.sub(r'([0-9])\s*[×xX]\s*10\s*([+\-−]?\d+)', r'\1e\2', s)
+        return s
+
+    def _try_parse_bytes(b: bytes) -> pd.DataFrame | None:
+        # try utf-8 first, then latin-1
+        for enc in ("utf-8", "latin-1"):
+            try:
+                txt = b.decode(enc)
+            except Exception:
+                continue
+            txt = _clean_text(txt)
+            buf = io.StringIO(txt)
+            try:
+                # let pandas sniff delimiter
+                df = pd.read_csv(buf, sep=None, engine="python")
+            except Exception:
+                # last resort: try comma
+                buf.seek(0)
+                try:
+                    df = pd.read_csv(buf, sep=",")
+                except Exception:
+                    continue
+            # flexible column matching
+            cols = list(df.columns)
+            def find_col(preds):
+                for c in cols:
+                    low = re.sub(r'[^a-z0-9]+', '', c.lower())
+                    if all(p in low for p in preds):
+                        return c
+                return None
+            found = {}
+            found_time = find_col(["time"])
+            found_x = find_col(["x", "m", "s", "2"]) or find_col(["x"])
+            found_y = find_col(["y", "m", "s", "2"]) or find_col(["y"])
+            found_z = find_col(["z", "m", "s", "2"]) or find_col(["z"])
+            if found_time and found_x and found_y and found_z:
+                # rename columns to canonical names
+                rename_map = {
+                    found_time: "Time (s)",
+                    found_x: "X (m/s^2)",
+                    found_y: "Y (m/s^2)",
+                    found_z: "Z (m/s^2)",
+                }
+                df = df.rename(columns=rename_map)
+                # Ensure numeric types for x,y,z and time
+                try:
+                    df["Time (s)"] = pd.to_numeric(df["Time (s)"], errors="coerce")
+                    df["X (m/s^2)"] = pd.to_numeric(df["X (m/s^2)"], errors="coerce")
+                    df["Y (m/s^2)"] = pd.to_numeric(df["Y (m/s^2)"], errors="coerce")
+                    df["Z (m/s^2)"] = pd.to_numeric(df["Z (m/s^2)"], errors="coerce")
+                except Exception:
+                    return None
+                # drop rows where any required numeric column is NaN
+                df = df.dropna(subset=["Time (s)", "X (m/s^2)", "Y (m/s^2)", "Z (m/s^2)"])
+                return df
+        return None
+
     accel_df = pd.DataFrame()
 
-    # Handle single file (CSV) or ZIP archive
-    if os.path.isfile(folder_name):
-        if zipfile.is_zipfile(folder_name):
-            with zipfile.ZipFile(folder_name) as z:
-                for member in z.namelist():
-                    if member.lower().endswith('.csv'):
-                        with z.open(member) as f:
-                            raw_df = pd.read_csv(io.TextIOWrapper(f, encoding="utf-8"), dtype=str)
-                            # Check for required columns
-                            required_columns = ["Time (s)", "X (m/s^2)", "Y (m/s^2)", "Z (m/s^2)"]
-                            if all(col in raw_df.columns for col in required_columns):
-                                accel_df = raw_df
-                                break  # Stop after finding the first valid CSV
-            if accel_df.empty:
-                raise FileNotFoundError(f"No valid accelerometer CSV found inside ZIP {folder_name!s}")
-        else:
-            # Handle plain CSV file
-            raw_df = pd.read_csv(folder_name, dtype=str)
-            required_columns = ["Time (s)", "X (m/s^2)", "Y (m/s^2)", "Z (m/s^2)"]
-            if all(col in raw_df.columns for col in required_columns):
-                accel_df = raw_df
-            else:
-                raise ValueError(f"CSV file must contain columns: {', '.join(required_columns)}")
-    else:
-        # Handle folder on disk
-        for file in os.listdir(folder_name):
-            if file.lower().endswith(".csv"):
-                path = os.path.join(folder_name, file)
-                raw_df = pd.read_csv(path, dtype=str)
-                required_columns = ["Time (s)", "X (m/s^2)", "Y (m/s^2)", "Z (m/s^2)"]
-                if all(col in raw_df.columns for col in required_columns):
-                    accel_df = raw_df
-                    break
+    # handle zip file
+    if os.path.isfile(folder_name) and zipfile.is_zipfile(folder_name):
+        with zipfile.ZipFile(folder_name) as zf:
+            # search recursively in zip namelist for csvs
+            for member in zf.namelist():
+                if member.lower().endswith(".csv"):
+                    try:
+                        b = zf.read(member)
+                    except Exception:
+                        continue
+                    parsed = _try_parse_bytes(b)
+                    if parsed is not None:
+                        accel_df = parsed
+                        break
+        if accel_df.empty:
+            raise FileNotFoundError(f"No valid accelerometer CSV found inside ZIP {folder_name!s}")
 
+    # single csv file
+    elif os.path.isfile(folder_name) and folder_name.lower().endswith(".csv"):
+        with open(folder_name, "rb") as fh:
+            b = fh.read()
+        parsed = _try_parse_bytes(b)
+        if parsed is None:
+            raise ValueError(f"CSV file {folder_name!s} does not contain required columns or is unreadable.")
+        accel_df = parsed
+
+    # directory (search recursively)
+    elif os.path.isdir(folder_name):
+        for root, _, files in os.walk(folder_name):
+            for fname in files:
+                if fname.lower().endswith(".csv"):
+                    path = os.path.join(root, fname)
+                    with open(path, "rb") as fh:
+                        b = fh.read()
+                    parsed = _try_parse_bytes(b)
+                    if parsed is not None:
+                        accel_df = parsed
+                        break
+            if not accel_df.empty:
+                break
         if accel_df.empty:
             raise FileNotFoundError(f"No valid accelerometer CSV found in {folder_name!s}")
 
-    # Add magnitude column
+    else:
+        raise ValueError(f"{folder_name!s} is not a file, zip, or directory.")
+
+    # compute magnitude column as before
     accel_df["Magnitude (m/s^2)"] = np.sqrt(
         accel_df["X (m/s^2)"].astype(float) ** 2
         + accel_df["Y (m/s^2)"].astype(float) ** 2

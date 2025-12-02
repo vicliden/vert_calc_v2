@@ -2,3 +2,4 @@ testing/
 .venv/
 __pycache__/
 .vscode/
+tmp_upload/
