@@ -303,7 +303,7 @@ def zero_gravity(df_jump: pd.DataFrame) -> pd.DataFrame:
 def detect_takeoff_v(time_s: np.ndarray,
                      mag_zeroed: np.ndarray,
                      lookback_s: float = 1.0,
-                     extra_offset_samples: int = 5):
+                     extra_offset_samples: int = 3):
     """
     Simple heuristic:
 

@@ -107,7 +107,7 @@ if len(folders) == 0:
     st.stop()
 
 st.sidebar.header("Options")
-save_plots = st.sidebar.checkbox("Save plots to results folder", value=False)
+save_plots = st.sidebar.checkbox("Save plots to results folder", value=True)
 window_radius = st.sidebar.number_input("Per-jump window radius (s)", min_value=0.5, max_value=10.0, value=2.0)
 rel_peak_thresh = st.sidebar.slider("Relative landing peak threshold", min_value=0.1, max_value=1.0, value=0.5)
 
