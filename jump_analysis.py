@@ -16,7 +16,6 @@ GRAVITY = 9.81  # m/s^2
 # ----------------------------
 # 1. DATA LOADING / PREP
 # ----------------------------
-
 def load_accelerometer_folder(folder_name: str) -> pd.DataFrame:
     """
     Reads accelerometer CSV(s) from a folder, single file, or ZIP archive.
@@ -32,90 +31,54 @@ def load_accelerometer_folder(folder_name: str) -> pd.DataFrame:
         Magnitude (m/s^2)
     """
 
-    folder_dict: dict[str, pd.DataFrame] = {}
+    # Initialize an empty DataFrame
+    accel_df = pd.DataFrame()
 
     # Handle single file (CSV) or ZIP archive
     if os.path.isfile(folder_name):
         if zipfile.is_zipfile(folder_name):
             with zipfile.ZipFile(folder_name) as z:
                 for member in z.namelist():
-                    # Only process CSV files named "Raw Data"
-                    if member.lower() == "raw data.csv":
+                    if member.lower().endswith('.csv'):
                         with z.open(member) as f:
                             raw_df = pd.read_csv(io.TextIOWrapper(f, encoding="utf-8"), dtype=str)
-                            cleaned_df = raw_df.apply(
-                                lambda col: (
-                                    col.str.replace("×10^", "e", regex=False)
-                                       .pipe(pd.to_numeric, errors="coerce")
-                                )
-                                if col.dtype == 'object' else col
-                            )
-                            folder_dict["Raw Data"] = cleaned_df
-                            break  # Stop after finding the first valid CSV
-            if not folder_dict:
+                            # Check for required columns
+                            required_columns = ["Time (s)", "X (m/s^2)", "Y (m/s^2)", "Z (m/s^2)"]
+                            if all(col in raw_df.columns for col in required_columns):
+                                accel_df = raw_df
+                                break  # Stop after finding the first valid CSV
+            if accel_df.empty:
                 raise FileNotFoundError(f"No valid accelerometer CSV found inside ZIP {folder_name!s}")
-            accel_df = folder_dict["Raw Data"].copy()
         else:
-            # plain CSV file
-            path = folder_name
-            raw_df = pd.read_csv(path, dtype=str)
-            cleaned_df = raw_df.apply(
-                lambda col: (
-                    col.str.replace("×10^", "e", regex=False)
-                       .pipe(pd.to_numeric, errors="coerce")
-                )
-                if col.dtype == 'object' else col
-            )
-            # Check for required columns
+            # Handle plain CSV file
+            raw_df = pd.read_csv(folder_name, dtype=str)
             required_columns = ["Time (s)", "X (m/s^2)", "Y (m/s^2)", "Z (m/s^2)"]
-            if not all(col in cleaned_df.columns for col in required_columns):
+            if all(col in raw_df.columns for col in required_columns):
+                accel_df = raw_df
+            else:
                 raise ValueError(f"CSV file must contain columns: {', '.join(required_columns)}")
-            accel_df = cleaned_df.copy()
     else:
         # Handle folder on disk
         for file in os.listdir(folder_name):
-            if not file.lower().endswith(".csv"):
-                continue
+            if file.lower().endswith(".csv"):
+                path = os.path.join(folder_name, file)
+                raw_df = pd.read_csv(path, dtype=str)
+                required_columns = ["Time (s)", "X (m/s^2)", "Y (m/s^2)", "Z (m/s^2)"]
+                if all(col in raw_df.columns for col in required_columns):
+                    accel_df = raw_df
+                    break
 
-            path = os.path.join(folder_name, file)
-            raw_df = pd.read_csv(path, dtype=str)
-            cleaned_df = raw_df.apply(
-                lambda col: (
-                    col.str.replace("×10^", "e", regex=False)
-                       .pipe(pd.to_numeric, errors="coerce")
-                )
-                if col.dtype == 'object' else col
-            )
-            # Check for required columns
-            required_columns = ["Time (s)", "X (m/s^2)", "Y (m/s^2)", "Z (m/s^2)"]
-            if all(col in cleaned_df.columns for col in required_columns):
-                folder_dict[file] = cleaned_df
-
-        if not folder_dict:
+        if accel_df.empty:
             raise FileNotFoundError(f"No valid accelerometer CSV found in {folder_name!s}")
 
-        # Use the first valid CSV found
-        accel_df = next(iter(folder_dict.values())).copy()
-
-    # add magnitude column
+    # Add magnitude column
     accel_df["Magnitude (m/s^2)"] = np.sqrt(
-        accel_df["X (m/s^2)"] ** 2
-        + accel_df["Y (m/s^2)"] ** 2
-        + accel_df["Z (m/s^2)"] ** 2
+        accel_df["X (m/s^2)"].astype(float) ** 2
+        + accel_df["Y (m/s^2)"].astype(float) ** 2
+        + accel_df["Z (m/s^2)"].astype(float) ** 2
     )
 
     return accel_df
-
-
-def to_mag_df(accel_df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Slim dataframe -> just time + magnitude.
-    """
-    out = pd.DataFrame({
-        "Time (s)": accel_df["Time (s)"].to_numpy(),
-        "Magnitude": accel_df["Magnitude (m/s^2)"].to_numpy(),
-    })
-    return out
 
 
 # ----------------------------
