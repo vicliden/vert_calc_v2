@@ -13,9 +13,8 @@ GRAVITY = 9.81  # m/s^2
 
 def load_accelerometer_folder(folder_name: str) -> pd.DataFrame:
     """
-    Reads all CSVs in a folder, converts scientific-notation-like text ("×10^")
-    to floats, and returns the Accelerometer dataframe with magnitude added.
-
+    Reads accelerometer CSV(s) from a folder or single file.
+    
     Expected columns in Accelerometer.csv:
         "Time (s)", "X (m/s^2)", "Y (m/s^2)", "Z (m/s^2)"
 
@@ -26,54 +25,57 @@ def load_accelerometer_folder(folder_name: str) -> pd.DataFrame:
         X (m/s^2), Y (m/s^2), Z (m/s^2)
         Magnitude (m/s^2)
     """
-    # read every .csv in folder into dict of dfs
     folder_dict: dict[str, pd.DataFrame] = {}
 
-    for file in os.listdir(folder_name):
-        # only care about CSVs
-        if not file.lower().endswith(".csv"):
-            continue
-        if file == "meta":
-            continue
-
-        base = os.path.splitext(file)[0]
-        base_l = base.lower()
-
-        # require filenames related to accelerometer (contain "acc")
-        # but exclude files that mention "linear" (e.g. "linear_acc.csv")
-        if "acc" not in base_l or "linear" in base_l:
-            continue
-
-        path = os.path.join(folder_name, file)
-
-        # read as strings first to clean weird "×10^" notation
+    # Handle single file
+    if os.path.isfile(folder_name):
+        path = folder_name
         raw_df = pd.read_csv(path, dtype=str)
-
         cleaned_df = raw_df.apply(
             lambda col: (
                 col.str.replace("×10^", "e", regex=False)
                    .pipe(pd.to_numeric, errors="coerce")
             )
         )
+        accel_df = cleaned_df.copy()
+    else:
+        # Handle folder
+        for file in os.listdir(folder_name):
+            if not file.lower().endswith(".csv") or file == "meta":
+                continue
 
-        key = os.path.splitext(file)[0]
-        folder_dict[key] = cleaned_df
+            base = os.path.splitext(file)[0]
+            base_l = base.lower()
 
-    if not folder_dict:
-        raise FileNotFoundError(f"No accelerometer CSVs found in {folder_name!s}")
+            if "acc" not in base_l or "linear" in base_l:
+                print(f"Skipping non-accelerometer file: {file!s}")
+                continue
 
-    # Prefer exact "Accelerometer" key (case-insensitive), else pick a sensible fallback
-    accel_key = next((k for k in folder_dict if k.lower() == "accelerometer"), None)
-    if accel_key is None:
-        acc_keys = [k for k in folder_dict if "acc" in k.lower()]
-        if len(acc_keys) == 1:
-            accel_key = acc_keys[0]
-        elif len(acc_keys) > 1:
-            accel_key = next((k for k in acc_keys if "accelerometer" in k.lower()), acc_keys[0])
-        else:
-            accel_key = next(iter(folder_dict.keys()))
+            path = os.path.join(folder_name, file)
+            raw_df = pd.read_csv(path, dtype=str)
+            cleaned_df = raw_df.apply(
+                lambda col: (
+                    col.str.replace("×10^", "e", regex=False)
+                       .pipe(pd.to_numeric, errors="coerce")
+                )
+            )
+            key = os.path.splitext(file)[0]
+            folder_dict[key] = cleaned_df
 
-    accel_df = folder_dict[accel_key].copy()
+        if not folder_dict:
+            raise FileNotFoundError(f"No accelerometer CSVs found in {folder_name!s}")
+
+        accel_key = next((k for k in folder_dict if k.lower() == "accelerometer"), None)
+        if accel_key is None:
+            acc_keys = [k for k in folder_dict if "acc" in k.lower()]
+            if len(acc_keys) == 1:
+                accel_key = acc_keys[0]
+            elif len(acc_keys) > 1:
+                accel_key = next((k for k in acc_keys if "accelerometer" in k.lower()), acc_keys[0])
+            else:
+                accel_key = next(iter(folder_dict.keys()))
+
+        accel_df = folder_dict[accel_key].copy()
 
     # add magnitude column
     accel_df["Magnitude (m/s^2)"] = np.sqrt(
