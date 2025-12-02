@@ -11,10 +11,16 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 import zipfile
 import json
+import sys
 from typing import List
 
 import streamlit as st
 import pandas as pd
+
+# Ensure repo root is on sys.path so imports work even when Streamlit runs with CWD=app/
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
 
 from jump_analysis import analyze_jumps_from_folder, load_accelerometer_folder, to_mag_df
 
@@ -24,6 +30,29 @@ st.title("Jump Analyzer — phyphox CSVs")
 
 st.markdown(
     "Upload one or more phyphox/Ead/CSV files (or a zip of them). The app will group files by folder-style uploads, call analyze_jumps_from_folder, and show per-jump plots & metrics."
+)
+
+# Quick links to the phyphox apps for users who want to record CSVs on their phone
+st.sidebar.markdown("### Need the data source? 📱")
+st.sidebar.markdown(
+    "If you're recording accelerometer data on your phone, try the phyphox app — it can export CSVs that work with this tool.\n\n"
+    "- [phyphox on iOS (App Store)](https://apps.apple.com/us/app/phyphox/id1127319693)\n"
+    "- [phyphox on Android (Google Play)](https://play.google.com/store/apps/details?id=de.rwth_aachen.phyphox&utm_source=global_co&utm_medium=prtnr&utm_content=Mar2515&utm_campaign=PartBadge&pcampaignid=MKT-Other-global-all-co-prtnr-py-PartBadge-Mar2515-1)",
+    unsafe_allow_html=True,
+)
+
+# Add a short, friendly guide for recording proper accelerometer CSVs
+st.sidebar.markdown("---")
+st.sidebar.markdown("### Quick recording guide (how I record the CSVs) 🏃‍♂️📲")
+st.sidebar.markdown(
+    "Follow these simple steps to get clean data for jump analysis:\n"
+    "\n- Open an accelerometer/physics app (phyphox links above).\n"
+    "- Record the raw accelerometer components (X, Y and Z).\n"
+    "- Put the phone in your back pocket so it moves with your body.\n"
+    "- Start standing still, then do a vertical jump — try to land with fairly straight legs.\n"
+    "- Record a few jumps (more examples give better results), then export or upload the accelerometer CSV.\n"
+    "\nIf you want, try a couple of practice jumps to get comfortable before recording the ones you want to analyze.",
+    unsafe_allow_html=True,
 )
 
 uploaded = st.file_uploader("Upload CSV files or a ZIP", accept_multiple_files=True, type=["csv", "zip"])
