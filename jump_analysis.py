@@ -395,7 +395,11 @@ def analyze_jumps_from_folder(folder_name: str, save_plots = False, result_dir =
             "window_df" (the processed per-jump dataframe with Magnitude_zeroed)
     """
     accel_df = load_accelerometer_folder(folder_name)
-    mag_df = to_mag_df(accel_df)
+    try:
+        mag_df = to_mag_df(accel_df)
+
+    except Exception as e:
+        raise ValueError(f"Error processing accelerometer data: {e}")
 
     jump_windows = split_into_jump_windows(mag_df)
 
