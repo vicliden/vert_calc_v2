@@ -1,5 +1,14 @@
 import io
 import os
+import sys
+
+# When Streamlit runs the script from the `app/` directory the repository root
+# (where `jump_analysis.py` lives) may not be on sys.path. Make sure the repo
+# root is available so imports like `import jump_analysis` work on Render
+# and other hosts that change the current working directory.
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
 import zipfile
 import json
 from typing import List
