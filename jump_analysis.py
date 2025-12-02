@@ -80,6 +80,15 @@ def load_accelerometer_folder(folder_name: str) -> pd.DataFrame:
 
     return accel_df
 
+def to_mag_df(accel_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Slim dataframe -> just time + magnitude.
+    """
+    out = pd.DataFrame({
+        "Time (s)": accel_df["Time (s)"].to_numpy(),
+        "Magnitude": accel_df["Magnitude (m/s^2)"].to_numpy(),
+    })
+    return out
 
 # ----------------------------
 # 2. SIGNAL UTILITIES
