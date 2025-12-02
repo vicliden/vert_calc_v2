@@ -1,32 +1,36 @@
-# Jump Analyzer — web UI (Streamlit)
+# Jump Analyzer — my small Streamlit app + analysis tool
 
-This repository contains a small physics / accelerometer jump analysis library and a Streamlit web UI you can deploy to host a mobile-friendly interface.
+This repo is my quick tool for estimating airtime and approximate jump height from mobile accelerometer CSVs (e.g. phyphox/EDA exports). I built the analysis code and included a Streamlit UI so you can upload files from your phone and get plots + metrics right away.
 
-Files added in this change:
-- `app/streamlit_app.py` — Streamlit mobile-friendly uploader and UI that uses `analyze_jumps_from_folder` from `jump_analysis.py` and shows plots/metrics.
-- `requirements.txt` — minimal dependencies for Streamlit + analysis.
+Quick start (local)
+-------------------
+1) Create and activate a virtual environment (recommended):
 
-Quick local run (developer machine):
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
 
-```bash
-python -m pip install -r requirements.txt
+2) Install dependencies:
+
+```powershell
+pip install -r requirements.txt
+```
+
+3) Run the Streamlit app from the repo root:
+
+```powershell
 streamlit run app/streamlit_app.py
 ```
 
-Open the printed URL in your phone browser on the same network.
+4) Open the URL Streamlit prints (usually http://localhost:8501) in your phone or browser.
 
-Deploy to Render (short steps):
-1. Push your repo to GitHub.
-2. Create a new Web Service on Render.
-3. Connect to your repo and branch.
-4. Set Start Command:
+Running on Render
+-----------------
+I already included `render.yaml` so Render can pick it up. If you choose "Use existing render.yaml" when creating the service, it should be ready to go.
 
-```
+Start command used on Render:
+
+```text
 streamlit run app/streamlit_app.py --server.port $PORT --server.address 0.0.0.0
 ```
-
-Render will use `requirements.txt` to build dependencies. After deploy you'll get a public URL that you can visit on your phone.
-
-Privacy note: files you upload to a hosted service are processed on that host. If you want full local privacy, run the Streamlit app locally and access it from your phone on the same network.
-
-If you want, I can also add a tiny example Colab notebook for instant cloud execution.
