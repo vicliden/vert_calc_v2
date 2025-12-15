@@ -333,7 +333,7 @@ def detect_takeoff_v(time_s: np.ndarray,
         start_idx = max(0, landing_idx - lookback_n)
 
     # peaks BEFORE landing
-    local_seg = a[start_idx:landing_idx]
+    local_seg = a[start_idx:landing_idx-5]  # avoid tiny trailing edge
     peaks, _ = find_peaks(local_seg)
 
     if len(peaks) == 0:
